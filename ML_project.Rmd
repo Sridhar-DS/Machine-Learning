@@ -1,0 +1,152 @@
+
+# Machine learing Project - Prediction Assignment Writeup - Sridhar
+
+## 1.0 Objective:
+
+The goal of this project is to predict the manner in which the participants did the exercise. In other words, we need to predict the different fashions of the Unilateral Dumbbell Biceps crul performed by the participants. classe is the dependednt varaible in the dataset, and all others are independent variables. We have to build a prediction model to predict the classe variable. 
+
+## 2.0 Download the train and test datasets.Partition the data :
+
+```{r setup, include=TRUE}
+## Invoke the required libraries
+library(caret)
+library(randomForest)
+
+## Define the URLs
+training_Url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+test_Url <-  "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+## Read the files to a dataframe
+training_df <- read.csv(url(training_Url), na.strings=c("NA","#DIV/0!",""))
+testing_df <- read.csv(url(test_Url), na.strings=c("NA","#DIV/0!",""))
+
+## Review the columns and rows in train and test data sets. 
+dim(training_df);dim(testing_df)
+
+## Partioning the training set into two
+inTrain <- createDataPartition(training_df$classe, p=0.6, list=FALSE)
+myTraining <- training_df[inTrain, ]
+myTesting <- training_df[-inTrain, ]
+
+#The size of train and test partitions are
+dim(myTraining); dim(myTesting)
+
+```
+
+## 3.0 Cleanse the dataset
+
+The datasets has to be reviewed and I have removed all the columns which had more 70% as NA as their values. I have also removed the serial number column.
+
+```{r , include=TRUE }
+
+## The first column in all the datasets is a serial number and it has to be removed.
+myTraining <- myTraining[c(-1)]
+myTesting <- myTesting[c(-1)]
+testing_df <- testing_df[c(-1)]
+
+## Remove the near zero variance columns from training set
+nzv_train <- nearZeroVar(myTraining, saveMetrics=TRUE)
+myTraining <- myTraining[,nzv_train$nzv==FALSE]
+
+## Remove the near zero variance columns from test set
+nzv_test<- nearZeroVar(myTesting,saveMetrics=TRUE)
+myTesting <- myTesting[,nzv_test$nzv==FALSE]
+
+## Remove the columns that have more than 70% NA's
+temp_train <- myTraining
+for(i in 1:length(myTraining)) {
+    if( sum( is.na( myTraining[, i] ) ) /nrow(myTraining) >= .7) {
+        for(j in 1:length(temp_train)) {
+            if( length( grep(names(myTraining[i]), names(temp_train)[j]) ) == 1)  {
+                temp_train <- temp_train[ , -j]
+            }   
+        } 
+    }
+}
+
+myTraining <- temp_train
+
+## Now ensure that myTesting,testing_df also has the same columns as that of myTraining
+myTraining_cols <- colnames(myTraining)
+myTesting <- myTesting[myTraining_cols] 
+
+## testing_df doesnt have classe dependent variable
+train_sans_dv <- colnames(myTraining[, -58]) 
+testing_temp <- testing_df[train_sans_dv]
+
+## Ensure that data types of columns match across train and test
+for (i in 1:length(testing_temp) ) {
+    for(j in 1:length(myTraining)) {
+        if( length( grep(names(myTraining[i]), names(testing_temp)[j]) ) == 1)  {
+            class(testing_temp[j]) <- class(myTraining[i])
+        }      
+    }      
+}
+
+
+# To get the same class between testing and myTraining
+testing_temp2 <- rbind(myTraining[2, -58] , testing_temp)
+testing_final <- testing_temp2[-1,]
+
+## The data in myTraining , myTesting and test_df are as follows:
+dim(myTraining); dim(myTesting); dim(testing_final)
+
+```
+
+## 4.0 Cross validation using sampling of training dataset:
+
+I split the dataset with 75% as training and 25% as testing. The cross validation was done on three samples. The results were averaged for prediction. The average accuracy is 0.99728 i.e. 99.728%.
+
+```{r, include= TRUE}
+
+first_seed <- 6231
+accuracies <-c()
+for (i in 1:3){
+       set.seed(first_seed)
+       first_seed <- first_seed+1
+       trainIndex <- createDataPartition(y=myTraining$classe, p=0.75, list=FALSE)
+       trainingSet<- myTraining[trainIndex,]
+       testingSet<- myTraining[-trainIndex,]
+       modelFit <- randomForest(classe ~., data = trainingSet)
+       prediction <- predict(modelFit, testingSet)
+       testingSet$rightPred <- prediction == testingSet$classe
+       t<-table(prediction, testingSet$classe)
+       print(t)
+       accuracy <- sum(testingSet$rightPred)/nrow(testingSet)
+       accuracies <- c(accuracies,accuracy)
+       print(accuracy)
+}
+
+```
+
+## 5.0 Build model for prediction:
+
+Finally I used the originally prepared training dataset to train the model and test it on the original test dataset.I'm using all the independent variables as predictors and selected random forest to build the prediction model.
+
+```{r , include=TRUE}
+
+## Using random forest to build the model
+set.seed(224)
+modFit <- randomForest(classe ~ ., data=myTraining)
+pred <- predict(modFit, myTesting)
+
+## Confusion matrix
+cmrf <- confusionMatrix(pred, myTesting$classe)
+cmrf
+
+## Plot the model
+plot(modFit)
+
+## Predicting Results on the Test Data
+prediction_test <- predict(modFit, testing_final)
+prediction_test
+
+```
+
+## 6.0 Conclusion :
+
+Random Forests gave an accuracy of 99.82% in predicting classe variable. The expected out-of-sample error is 100-99.82 = 0.18%.
+
+
+
+
